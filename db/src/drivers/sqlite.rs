@@ -1,13 +1,13 @@
 use std::fmt::Display;
 
 use chrono::Utc;
-use sqlx::{types::Json, SqliteConnection};
+use sqlx::{query, types::Json, SqliteConnection};
 use tracing::{debug, error, warn};
 
 use crate::{
     data::{
         result::{CIDRCheck, PasswordCheck, PasswordModify},
-        Account, Allowlist, Blacklist, User,
+        Account, Allowlist, Blacklist, User, Viewport,
     },
     helper::check_cidr,
     interface::{DataSource, NetworkProvider},
@@ -316,15 +316,35 @@ impl DataSource for Sqlite {
         &mut self,
         stub: crate::data::stub::ServerStub,
     ) -> Option<crate::data::Server> {
-        todo!()
+        let query = sqlx::query_as::<_, User>("INSERT INTO servers (uuid, name, supported_versions, current_modpack, online) VALUES ($1, $2, $3, $4, $5) RETURNING * ")
+        .bind(Uuid::new_v4())
+        .bind(stub.name)
+        .bind(Json(stub.supported_versions))
+        .bind(Json(stub.current_modpack))
+        .bind(true)
+        .fetch_one(&mut self.conn)
+        .await;
+
+        ok_or_log(query)
     }
 
     async fn delete_server(&mut self, server_uuid: &uuid::Uuid) -> Option<crate::data::Server> {
-        todo!()
+        let query = sqlx::query_as::<_, Server>("DELETE FROM server WHERE uuid == ? RETURNING *")
+            .bind(server_uuid)
+            .fetch_one(&mut self.conn)
+            .await;
+
+        ok_or_log(query)
     }
 
+    #[tracing::instrument]
     async fn get_server_by_name(&mut self, name: String) -> Option<crate::data::Server> {
-        todo!()
+        let query = sqlx::query_as::<_, Server>("Select * FROM server WHERE name = ?")
+            .bind(name)
+            .fetch_optional(&mut self.conn)
+            .await;
+
+        ok_or_log(query).flatten()
     }
 
     async fn join_server(
@@ -381,7 +401,13 @@ impl DataSource for Sqlite {
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
     ) -> Option<crate::data::Viewport> {
-        todo!()
+        let query = sqlx::query_asLL<_, Viewport>("Select viewport FROM savedata WHERE player_uuid = $1 AND sever_uuid = $2")
+            .bind(player_uuid)
+            .bind(server_uuid)
+            .fetch_one(&mut self.conn)
+            .await;
+        ok_or_log(query)
+    
     }
 
     async fn update_playtime(
